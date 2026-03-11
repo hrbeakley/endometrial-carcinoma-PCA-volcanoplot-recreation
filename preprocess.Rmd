@@ -1,0 +1,97 @@
+---
+title: "project2"
+output: html_document
+---
+
+### Install Necessary Packages
+
+```{r}
+BiocManager::install("GEOquery")
+library(GEOquery)
+library(limma)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(tibble)
+```
+### Load dataset from GEO
+
+```{r}
+# download GEO dataset and return it as an ExpressionSet
+gset <- getGEO("GSE120490", GSEMatrix =TRUE, getGPL=FALSE)
+
+# select the ExpressionSet corresponding to the GPL570 microarray platform
+if (length(gset) > 1) idx <- grep("GPL570", attr(gset, "names")) else idx <- 1
+gset <- gset[[idx]]
+
+# get metadata table and expression matrix (rows as genes and columns as samples) 
+meta <- pData(gset)
+ex <- exprs(gset)
+```
+### Annotate microarray expression data with gene symbols
+
+```{r}
+# download GEO platform record for GPL570 and extract annotation table
+gpl <- getGEO("GPL570", destdir=".") 
+gpl_annot <- Table(gpl)
+
+# annotate expression data with gene symbols
+ex_annotated <- as.data.frame(ex)
+ex_annotated$gene_symbol <- gpl_annot$`Gene Symbol`[match(rownames(ex_annotated), gpl_annot$ID)]
+
+# handle probes that map to multiple genes
+ex_clean <- ex_annotated %>%
+  # remove any leading/trailing whitespace
+  mutate(gene_symbol = str_trim(gene_symbol)) %>%
+  # split multiple genes by " /// "
+  separate_rows(gene_symbol, sep = "\\s*///\\s*") %>%
+  # remove any empty strings (in case)
+  filter(gene_symbol != "")
+
+# collapse multiple probes per gene by taking the one with max expression
+ex_final <- ex_clean %>%
+  group_by(gene_symbol) %>%
+  summarise(across(where(is.numeric), max)) %>%
+  ungroup() %>%
+  column_to_rownames("gene_symbol")
+```
+
+### Perform differential expression analysis
+```{r}
+# Convert expression data to matrix for limma
+expr_limma <- as.matrix(ex_final)
+
+# Define design and contrast
+group <- factor(meta$characteristics_ch1)
+design <- model.matrix(~ 0 + group)
+colnames(design) <- make.names(levels(group))
+
+contrast.matrix <- makeContrasts(
+  Yes_vs_No = matastasis..No - matastasis..Yes,
+  levels = colnames(design)
+)
+
+# Fit limma model
+fit <- lmFit(expr_limma, design)
+fit2 <- contrasts.fit(fit, contrast.matrix)
+fit2 <- eBayes(fit2)
+
+# Extract results
+deg_results <- topTable(fit2, coef=1, adjust="BH", number=Inf)
+```
+
+
+### Write all necessary matrices to output files
+```{r}
+# Sample metadata (phenotype data)
+write.csv(meta, file = "gset_pheno.csv", row.names = TRUE)
+write.csv(ex, file = "expression_matrix.csv", row.names = TRUE)
+write.csv(deg_results, file = "deg_results.csv", row.names = TRUE)
+write.csv(ex_final, file = "annotated_expression.csv", row.names = TRUE)
+```
+
+## SessionInfo
+
+```{r}
+sessioninfo::session_info()
+```
