@@ -11,6 +11,7 @@ I elected to reproduce figures from a 2025 paper by Gao et al. investigating pro
 This repo contains:
 - **`preprocess.Rmd`** – preprocessing of microarray expression data and differential expression analysis  
 - **`report.ipynb`** – recreation of figures and the complete project report
+- **`report.html`** - rendered HTML report
 
 ### Reference
 [1] Gao, L., Yuan, D., Huang, A., & Qian, H. (2025). Bioinformatics-based identification of differentially expressed genes in endometrial carcinoma: Implications for early diagnosis and prognostic stratification. Frontiers in Genetics, 16, Article 1631060. https://doi.org/10.3389/fgene.2025.1631060
